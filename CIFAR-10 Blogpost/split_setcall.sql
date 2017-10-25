@@ -1,0 +1,1 @@
+COPY LOADER INTO trainset FROM split_set( (SELECT id,0.165 FROM cifar10) );

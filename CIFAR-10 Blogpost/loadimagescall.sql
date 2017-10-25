@@ -1,0 +1,1 @@
+COPY LOADER INTO cifar10 FROM loadImages('PATH_TO_FOLDER');

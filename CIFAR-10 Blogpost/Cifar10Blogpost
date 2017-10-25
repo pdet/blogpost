@@ -1,0 +1,113 @@
+##Integrating TensorFlow with MonetDB 
+
+Tensorflow is maintained by google and is the most popular machine learning library right now. Built to scale, Tensorflow is written in a combination of highly-optimized C++ and CUDA it is able to use CPU/GPUs at its maximum capabilities. Besides being extremely optimized to perform machine learning operations, one of the reasons for its massive popularity is due to its powerful Python api. Python is the languages of choice, from data scientists, and Tensorflow allows its usage to easily design, build, and train deep learning models.
+
+MonetDB has recently introduced python as one possible language to develop UDFs [Embedded Python/NumPy in MonetDB] [https://www.monetdb.org/blog/embedded-pythonnumpy-monetdb], which allows the integration of Tensorflow with MonetDB by exploiting the usage of the Python UDFs. Executing TesnorFlow inside MonetDB provides significant improvements over the traditional methods, such as mitigation of data movement, the use of the own DBMS to store and manage the models, creation of triggers to allow either Real-Time Intelligence or Batch Intelligence, low conversion overhead, automatic data parallelization, compression of data for fast GPU transfers{MonetDB doesn't really do this, maybe take it off}, among others. 
+
+In a previous blogpost we demonstrated an example of voter classification using the sklearn package [https://www.monetdb.org/blog/voter-classification-using-monetdbpython]. In this post we will present an example of image classification using TensorFlow inside MonetDB, going through all the steps from storing the images in the database, perform the evaluations, managing the models and showing some of the powerful capabilities from this integration.
+
+#The CIFAR-10 Dataset
+In this example we will store the images from the CIFAR-10 data set, and later, using a very simple model, the Softmax Regression, we will train, evaluate and manage our models. This is accomplished by taking advantage of the BLOB datatype to store the images and necessary python data structures inside MonetDB. 
+
+The CIFAR-10 dataset consists of 60.000 small images divided in 10 classes with 6000 images per class. The images are colored and made of 32x32 pixels. This dataset is usually divided between 50.000 images for training and 10.000 for evaluation. It also contains a csv file with the respective label to each image. You can download the compressed file here[ADD LINK]
+--TODO: ADD COUPLE OF EXAMPLES OF IMAGES/CLASSES from the dataset
+
+#The Softmax Regression
+The purpose of this blogpost is to showcase an example of using TensorFlow inside MonetDB, that way we will not explain any machine learning/deep learning concepts. For this example we will train models for the softmax regression using a couple of different parameters. Notice that for the problem of Image Classification it is commonly referred as the state-of-the-art solution the use of a Convolution Neural Network. However, we will do only the softmax regression for code simplicity.
+
+##SETUP
+In order to run this tutorial, you will need to install the last release of MonetDB, Python 2.7, pip (With some specific libraries) and Tensorflow.
+
+#MonetDB
+Some of the changes needed to run this tutorial are available in the DEFAULT branch on the MonetDB Mercurial Repository. 
+
+Assuming that mercurial is correctly installed in the machine you can clone the MonetDB repository and change to the default branch by issuing the following commands:
+
+hg clone http://dev.monetdb.org/hg/MonetDB/
+--hg checkout default
+
+In order to compile and install MonetDB please follow this tutorial [https://www.monetdb.org/Developers/SourceCompile]
+
+#Python 2.7
+MonetDB/Python only works with Python 2.7, be sure to install the correct version from [https://www.python.org/downloads/]
+
+#PIP
+PIP is the package manager for Python, it is necessary to install the packages that we are going to be using for this tutorial. Please refer to this website to install its latest version [https://pip.pypa.io/en/stable/installing/]
+
+The packages used in this tutorial are, numpy, pickle, imread and Tensoflow. Be sure to run the following commands to install them after installing pip.
+pip install numpy
+pip install pickle
+pip install imread
+pip install tensorflow
+
+#Running MonetDB/Python
+You need to explicitly enaple the pyton/monetdb integration by running the following command in mserver
+mserver5 --set embedded_py=true
+
+Now you can connect to monetdb using the mclient interface.
+
+##Tutorial
+--TODO : ADD A PICTURE FROM THE SCHEMA
+We start by defining uphand the database schema. It is composed by 6 Tables, described as follow:
+*label: Stores information about the image classes (e.g., airplane, cat, deer)
+*cifar10: Stores the images, its name and reference label/
+*cifar10numpy: Stores the preprocessed images.
+*trainset: Stores information about which images will be used for training.
+*classificationmodel : Stores model information after training.
+*classification: Stores the classification from a model to the evaluation images.
+[schema.sql]
+
+#Loading the CIFAR-10 Dataset
+The first step is to load the CIFAR-10 Dataset into MonetDB. The CIFAR-10 dataset consists of a folder with 60.000 pictures and one csv file that has information about which class that image belongs to. Our first UDF starts by reading the CSV File and creating a dictionary out of it. Then it opens image by image,, uses the dictionary to get their label and finally stores the image and its information into the cifar10 table using the _emit.emit command.
+[loadimages.sql]
+
+To call this function we just need to pass the folder path where the images are stored.
+[loadimagescall.sql]
+
+#Pre-Processing
+In order to use the data that we already have stored in the DBMS we need to transform the images in numpy arrays of 32x32x3 (32 pixels per 32 pixels per the RGB Colors), this is done by the imread_from_blob method from the imread library. 
+--TODO: Explain why or link to Deep Learning Tutorial
+[preprocessing.sql]
+
+To call this function we just need to do a sql query sending the images that we want to pre-processed. In our case we want all the images stored in the table.
+[preprocessingcall.sql]
+
+#Split Data
+Before we train our model we need to separate our dataset between the train set and the evaluation set. For this we use the same UDF presented in the voter classification post [https://www.monetdb.org/blog/voter-classification-using-monetdbpython] but now getting the percentage of data that goes to evaluation as input of our query.
+[split_set.sql]
+
+Since we want to use around 10.000 of the 60.000 images (i.e., around 16.5% of the total set) for evaluation, in our query call we pass all the images that need to be splitted and say that we want 16.5% of images reserved for evaluation.
+[split_setcall.sql]
+
+#Training and Storing The Model
+Here is where TensorFlow is first used, and this is done by importing the TensorFlow library. To store the model we must define all the variables that we will need to store with a name under quotes. Due to the way TensorFlow save and load its models we can't save it directly into the database, instead we save the path where the file is stored and use MonetDB to store some information about the model, like its name, the path where it will be saved and some of its parameters in order to allow comparisons later on.
+[trainmodel.sql]
+
+In order to train the models by this UDF we need to send the images and labels for training and some information regarding the model...
+[trainmodelcall.sql]
+
+#Retrieving and Evaluating the Model
+
+[classification.sql]
+
+[classificationcall.sql]
+
+#Defining Accuracy Function
+
+#Potential/Capabilities (Maybe save it to the paper w/ Storing meta data and binary format from tensorflow, talk w/ stefan)
+1. Toy Queries
+	1.1 Selecting Accuracy of One Specific Model
+	1.2 Select Model that has highest Total Accuracy
+	1.3 Select Model that performs the best and the worst when classifying Deers
+	1.4 Show All Models and all their accuracies
+	1.5 List top 5 incorrectly predicted images
+
+2. Triggers for Real-Time Intelligence
+
+3. Ensamble Learning
+
+#Conclusion
+Talk about other opportunities/challenges and how "easy" is to query models after it, also talk about other monetdb limitations (Like repeating constants, udfs going over table definitions, auto increment id not working... when using them in a query and possible workaround like loopback queries), other ways to do the same thing...
+
+#About the Author
+Pedro Holanda ...
