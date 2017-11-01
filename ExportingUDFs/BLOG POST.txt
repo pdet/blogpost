@@ -4,7 +4,7 @@ Title:
 Interactive Debugging for Python UDFs
 
 #########INTRODUCTION:
-In a previous blogpost we introduced MonetDB/Python. With MonetDB/Python [https://www.monetdb.org/blog/embedded-pythonnumpy-monetdb], users can perform analytics inside the database(aka In-Database Analytics) by mitigating the costs of data transference.
+In a previous blogpost we introduced MonetDB/Python. With MonetDB/Python [https://www.monetdb.org/blog/embedded-pythonnumpy-monetdb], users can perform analytics inside the database, mitigating the costs of data transference.
 
 While UDFs can perform highly efficient data analysis, debugging them has been a long-standing problem. Because the UDFs are executed within the database server, developers cannot use sophisticated debugging techniques (e.g., Interactive Debugging). Instead, they have to resort to inefficient debugging strategies (e.g., Print/Log-file debugging) in an effort to make the code work.
 
@@ -12,48 +12,48 @@ In this blogpost, we show a solution to this problem. From within a client conne
 
 
 ##########SETUP:
-#MonetDB Installation:
-Currently MonetDB/Python is available in the in-development version of MonetDB in the default branch and must be compiled from source. Note that you will need NumPy installed for embedded python to work. You can look here for information on how to install NumPy. To compile the pythonudf branch from scratch, you can download a tar file of the source here. You can then compile the source by running the following commands in the root directory of the source tree.
+#PymonetDB & Numpy Installation:
+Before running MonetDB with the python integration you need to be sure to have the latest version of Numypy and PymonetDB installed. To do that be sure to issue the following commands, assuming you already have pip.
+pip install numpy
+pip install pymonetdb
 
-./bootstrap
-./configure --prefix=<install_directory>
-make install
+#Runing MonetDB with python integration
 You can then run MonetDB by starting the monetdbd daemon or mserver5 in the given installation directory. Note that you will need to explicitly enable Python integration using the following commands if you are using the monetdbd daemon.
-
 monetdb stop pytest
 monetdb set embedpy=true pytest
 monetdb start pytest
-Or the following command if you are running mserver5.
 
+Or the following command if you are running mserver5.
 mserver5 --set embedded_py=true
+
 You can then connect to MonetDB and use embedded python.
 
 
-#PymonetDB Installation:
-You just need to download the client version with the debugging extensions and execute the following command in the pymonetdb folder: python setup install
-
-Pymonetdb with debugging extension : goo.gl/tcKSfi
-
-
-
 ##########Usage
+-- For our example we will start by creating a table with integers through 1 to 5.
+[0.sql]
+
 -- Mean Deviation Example
 [1.sql]
-In our example we have a UDF that is supposed to compute the mean absolute deviation of a given column. However we introduce a logical error in line 9 by not taking the absolute value in consideration. Usually the developer must insert print statements to track variable changes. However we extend the pymonetdb client, allowing the user to easily export the UDF.
+Assume you want to create a UDF that computes the mean absolute deviation of a given column. However you accidentaly introduce a logical error (line 9) by not taking the absolute value in consideration. Usually you would need to insert print statements to track variable changes. However we extend the pymonetdb client, allowing the user to easily export the UDF.
 
 --Debug Function
+If you wish to debug your function using pdb you can easily call the debug function as presented below.
 def debug(self, query, fname,sample = -1)
 [debug.py]
-To perform terminal debugging the developer connects to a running database using the Python client. Then, he creates a SQL query involving the UDF, just as he would if he were to normally execute the query. However, instead of executing it, he calls either the debug function (line 5) for console debugging or the export function (line 6) for IDE debugging. In case of console debugging an instance of pdb is started.
-
-The problem with transferring the input data of UDFs from the database to the client is that the amount of data can be very large. This is only required for debugging, however. The actual execution of the UDFs still occurs completely inside the database server. Still, it is possible that the clients’ machine does not have space for all the required input data. For this reason, we also introduce an optional sampling step that only transfers a uniform random sample of the data instead of the full input data set.
+You start by openning a database connection using pymonetdb.connect(), later you get a cursor object from the connecion and through the cursor object you call the debug() function, sendings as parameters the problematic sql and the UDF name you wish to debug. We also introduce an optional sampling step that only transfers a uniform random sample of the data instead of the full input data set. If you wish to sample you just need to send the number of elements you wish to get from the sampling (e.g., c.debug(sql, 'mean_deviation',10) in case you desire the subset of 10 elements)
 
 --Export Function
 def export(self, query, fname,sample = -1, filespath='./')
-Here we have an example of the function exported for IDE debugging. The main difference from the debug() function is that the UDF and the data are stored in disk in a python and binary files respectively. Code is generated in order to allow the deserialization of the input data (line 15) and the function call is also generated (line 16). The code is ready to be imported and executed in IDEs and accepts a path parameter where the developer can specify where the data must be stored.
+If you prefeer to persist the data/function locally in order to use IDEs you can use the export() function. It can be used by calling the export() function instead of debug() as demonstrated below:
+[export.py]
+The export function also has the sampling option but also has a filespath option where you can define the location which the files will be persisted (e.g., c.export(sql, 'mean_deviation',10,path/to-save-files/)). The default is the current folder.
+
+Here you have an example of how the exported function looks like. Notice that some code is replaced in order to be sure that the function is ready to be executed in your ide of choice.
 [mean_deviation.py]
 
-
+--Loopback Queries
+MonetDB/Python supports loopback queries inside UDFs. Loopback queries allow users to query the database directly from within the UDF. The results of the query are converted to the host language of the UDFs. In Python UDFs, they can be can used through the \texttt{\_conn} object that is passed to every UDF. Loopback queries are useful because they can bypass cardinality restrictions of the relational querying model. Loopback queries are currently only supported by our debug() function. That way they won't work when using the export() function. 
 
 ########Author:
-Pedro Holanda is a PhD student working at CWI. He is currently working on his PhD's thesis at the CWI Database Architectures Group.
+Pedro Holanda is a PhD student working at CWI. He is currently working on his PhD's thesis at the CWI Database Architectures Group. But only the future will tell if they will be related to Python UDFs or not.
